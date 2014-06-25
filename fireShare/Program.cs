@@ -13,19 +13,23 @@ namespace fireShare
     using FireSharp.Interfaces;
     using FireSharp.Response;
     using System.Net.Sockets;
-    using RestSharp;
 
     class Program
     {
         static void Main(string[] args)
         {
-            Host.Interaction test = new Host.Interaction("testuser1");
+            //Host.Interaction test = new Host.Interaction("testuser1");
             //test.enter();
-            test.retriveLocalPeers();
+            //test.retrivePeers();
+            //byte[] multicast_byte_address = {224,0,0,1};
+            //IPAddress multicast_group = new IPAddress(multicast_byte_address);
+            //MulticastOption multicast = new MulticastOption(multicast_group);
+            //StartListener();
+            Swarm.enterSwarm();
+            
 
         }
     }
-
 
     class Host
     {
@@ -33,17 +37,20 @@ namespace fireShare
         public class Interaction
         {
             private const string basename = "hosts/";
+            private string username;
             private string user_url;
             private bool is_user_set = false;
             IFirebaseConfig config;
             IFirebaseClient client;
             FirebaseResponse response;
             Details details;
-
-            Dictionary<string,string> local_peers_details;
+            Dictionary<string,Dictionary<string,string>> local_peers_details;
 
             public Interaction(string username)
             {
+                //Set the username member
+                this.username = username;
+
                 //Instantiate the default config
                 config = new FirebaseConfig
                 {
@@ -82,21 +89,32 @@ namespace fireShare
                 Console.WriteLine(delete_response.Success);
             }
 
-            public void retriveLocalPeers()
+            public void retrivePeers()
             {
                 response = client.Get(basename);
-                local_peers_details = response.ResultAs<Dictionary<string, string>>();
+                
+                local_peers_details = response.ResultAs<Dictionary<string, Dictionary<string, string>>>();
+                
+                local_peers_details.Remove(username);
 
-                foreach (string key in local_peers_details.Keys)
-                {
-                    Console.WriteLine(key);
-                    Console.WriteLine("\t" + local_peers_details[key].GetType());
-                }
+                //foreach (string outerkey in local_peers_details.Keys)
+                //{
+                //    Console.WriteLine(outerkey);
+                
+                //    foreach (string inner_key in local_peers_details[outerkey].Keys)
+                //    {
+                //        Console.WriteLine("\t" + inner_key);
+                //        Console.WriteLine("\t\t" + local_peers_details[outerkey][inner_key]);
+                //    }
+                //}
             }
+
+
         
         }
 
-        class Details
+        [Serializable]
+        public class Details
         {
              //HostInfo Members
         public string local_IP { get; set; }
@@ -108,8 +126,8 @@ namespace fireShare
             computer_name = Dns.GetHostName();
 
             //Process to fetch the host's local IP address
-            IPHostEntry temp = Dns.GetHostEntry(computer_name);
-            foreach (IPAddress addr in temp.AddressList)
+            IPAddress []  temp = Dns.GetHostAddresses(Dns.GetHostName());
+            foreach (IPAddress addr in temp)
             {
                 if (addr.AddressFamily == AddressFamily.InterNetwork)
                 {
@@ -118,8 +136,49 @@ namespace fireShare
                 }
             }
         }
+        //public void GetObjectData(SerializationInfo info, StreamingContext context)
+        //{
+
+        //}
+        
 
         }
 
     }
+
+    class Swarm
+    {
+        public static void enterSwarm()
+        {
+            Socket s = new Socket(AddressFamily.InterNetwork, SocketType.Dgram,
+            ProtocolType.Udp);
+            s.EnableBroadcast = true;
+            
+            IPAddress broadcast = IPAddress.Parse("192.168.127.255");
+            IPEndPoint ep = new IPEndPoint(broadcast, 11000);
+            //s.Connect(ep);
+            //NetworkStream stream = new NetworkStream(s);
+            //formatter.Serialize(stream, details);
+
+            string local_IP = "";
+            IPAddress[] temp = Dns.GetHostAddresses(Dns.GetHostName());
+            foreach (IPAddress addr in temp)
+            {
+                if (addr.AddressFamily == AddressFamily.InterNetwork)
+                {
+                    local_IP = addr.ToString();
+                    break;
+                }
+            }
+            byte[] sendbuf = Encoding.ASCII.GetBytes(local_IP);
+            //stream.Close();
+
+            s.SendTo(sendbuf, ep);
+            
+
+            Console.WriteLine("Message sent to the broadcast address");
+        }
+    }
+
+
 }
