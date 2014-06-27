@@ -21,11 +21,9 @@ namespace fireShare
             //Host.Interaction test = new Host.Interaction("testuser1");
             //test.enter();
             //test.retrivePeers();
-            //byte[] multicast_byte_address = {224,0,0,1};
-            //IPAddress multicast_group = new IPAddress(multicast_byte_address);
-            //MulticastOption multicast = new MulticastOption(multicast_group);
-            //StartListener();
-            Swarm.enterSwarm();
+
+            Swarm swarm = new Swarm();
+            swarm.enterSwarm();
             
 
         }
@@ -148,35 +146,97 @@ namespace fireShare
 
     class Swarm
     {
-        public static void enterSwarm()
-        {
-            Socket s = new Socket(AddressFamily.InterNetwork, SocketType.Dgram,
-            ProtocolType.Udp);
-            s.EnableBroadcast = true;
-            
-            IPAddress broadcast = IPAddress.Parse("192.168.127.255");
-            IPEndPoint ep = new IPEndPoint(broadcast, 11000);
-            //s.Connect(ep);
-            //NetworkStream stream = new NetworkStream(s);
-            //formatter.Serialize(stream, details);
+        private const int destination_port = 11000;
+        private const int source_port = 11001;
+        IPAddress local_IP;
+        IPEndPoint local_EP;
+        IPAddress destination_IP;
+        IPEndPoint destination_EP;
+        ArrayList swarm;
 
-            string local_IP = "";
-            IPAddress[] temp = Dns.GetHostAddresses(Dns.GetHostName());
-            foreach (IPAddress addr in temp)
+        public Swarm()
+        {
+            //Initialize the swarm array for keeping track of hosts connected
+            swarm = new ArrayList();
+
+            //Find my local IP address
+            IPAddress[] addresses = Dns.GetHostAddresses(Dns.GetHostName());
+            foreach (IPAddress addr in addresses)
             {
                 if (addr.AddressFamily == AddressFamily.InterNetwork)
                 {
-                    local_IP = addr.ToString();
+                    local_IP = addr;
                     break;
                 }
             }
-            byte[] sendbuf = Encoding.ASCII.GetBytes(local_IP);
-            //stream.Close();
 
-            s.SendTo(sendbuf, ep);
+            //Set Local Endpoint
+            local_EP = new IPEndPoint(local_IP, source_port);
+
+            //Set broadcast IP address to broadcast presence to
+            destination_IP = IPAddress.Parse("192.168.127.255");
+            //broadcast_IP = IPAddress.Broadcast;
             
+            //Set broadcast Endpoint to broadcast presence to
+            destination_EP = new IPEndPoint(destination_IP, destination_port);
+
+        }
+
+
+        //Sends broadcast from port 11001 that you are entering the swarm
+        public void enterSwarm()
+        {
+
+            //Create UDP socket
+            Socket s = new Socket(AddressFamily.InterNetwork, SocketType.Dgram,
+            ProtocolType.Udp);
+
+            //Bind UDP socket to local source IP address and port 
+            s.Bind(local_EP);
+
+            //Allow Broadcast IP addresses
+            s.EnableBroadcast = true;
+            
+            //Set the payload to be sent over the UDP socket
+            //  This payload is me (the source) IP address
+            byte[] sendbuf = Encoding.ASCII.GetBytes(local_IP.ToString());
+            
+            //Perform the broadcast
+            s.SendTo(sendbuf, destination_EP);
 
             Console.WriteLine("Message sent to the broadcast address");
+        }
+
+
+        //Monitors the swarm on port 11000 for other hosts joining and leaving the swarm
+        private static void monitorSwarm()
+        {
+            bool done = false;
+
+            UdpClient listener = new UdpClient(destination_port);
+            IPEndPoint groupEP = new IPEndPoint(IPAddress.Any, destination_port);
+
+            try
+            {
+                while (!done)
+                {
+                    Console.WriteLine("Waiting for broadcast");
+                    byte[] bytes = listener.Receive(ref groupEP);
+
+                    Console.WriteLine("Received broadcast from {0} :\n {1}\n",
+                        groupEP.ToString(),
+                        Encoding.ASCII.GetString(bytes, 0, bytes.Length));
+                }
+
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e.ToString());
+            }
+            finally
+            {
+                listener.Close();
+            }
         }
     }
 
